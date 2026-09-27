@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOS Capacitor Simulator</title>
+<style>
+:root{
+  --ground:#F2F4F7; --surface:#FFFFFF; --ink:#1E2833; --muted:#5A6573; --accent:#004187; --accent-ink:#FFFFFF;
+  --line:#D5DBE3; --chip:#E7EDF5; --chip-ink:#12355F; --figure:#FFFFFF; --focus:#E58A00;
+  --good:#1B8A3A; --warn:#E58A00;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E141B; --surface:#151D26; --ink:#E4E9EF; --muted:#9CA8B5; --accent:#8DB8F2; --accent-ink:#0B1624;
+    --line:#27323E; --chip:#1C2A39; --chip-ink:#CFE0F7; --figure:#FFFFFF; --focus:#F2A93B;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E141B; --surface:#151D26; --ink:#E4E9EF; --muted:#9CA8B5; --accent:#8DB8F2; --accent-ink:#0B1624;
+  --line:#27323E; --chip:#1C2A39; --chip-ink:#CFE0F7; --figure:#FFFFFF; --focus:#F2A93B;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.45 Arial,Helvetica,sans-serif}
+.app{box-sizing:border-box;height:100%;display:flex;flex-direction:column;padding-inline:16px;padding-block:10px 12px;gap:10px}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;border-bottom:3px solid var(--accent);padding-bottom:6px}
+header h1{margin:0;font-size:22px;letter-spacing:.2px;color:var(--accent);text-wrap:balance}
+header p{margin:0;color:var(--muted);font-size:13px}
+main{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:280px minmax(0,1.05fr) minmax(0,1fr);gap:10px}
+.controls{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+.controls h2{margin:0;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+.group{display:flex;flex-direction:column;gap:6px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.row label{font-size:13.5px}
+output{font-weight:bold;color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap}
+.vg output{font-size:20px}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+select{font:13.5px Arial,Helvetica,sans-serif;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:3px 4px}
+.btns{display:grid;grid-template-columns:repeat(2,1fr);gap:5px}
+button{font:12.5px Arial,Helvetica,sans-serif;color:var(--chip-ink);background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:5px 6px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:bold}
+button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.checks{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px}
+.checks label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.checks input{accent-color:var(--accent)}
+.state{border-top:1px solid var(--line);padding-top:8px}
+.region{display:inline-block;padding:2px 8px;border-radius:10px;background:var(--chip);color:var(--chip-ink);font-weight:bold;font-size:12.5px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+td{padding:1.5px 0}
+td:last-child{text-align:right;font-weight:bold}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.col{display:flex;flex-direction:column;gap:10px;min-height:0}
+.card{margin:0;background:var(--figure);border:1px solid var(--line);border-radius:6px;overflow:hidden;min-height:0;position:relative}
+.card .plot{position:absolute;inset:0}
+.card svg{display:block;width:100%;height:100%}
+#cBand{flex:2.35 1 0}
+#cCharge{flex:1 1 0}
+#cPsi,#cQ,#cCV{flex:1 1 0}
+sub,sup{font-size:72%}
+@media (max-width:1100px){
+  main{grid-template-columns:260px minmax(0,1fr)}
+  .col-curves{grid-column:1 / -1;flex-direction:row;flex-wrap:wrap}
+  .col-curves .card{flex:1 1 300px;min-height:230px}
+}
+@media (max-width:720px){
+  .app{height:auto}
+  main{grid-template-columns:minmax(0,1fr)}
+  #cBand{flex:none;height:380px}
+  #cCharge{flex:none;height:190px}
+  .col-curves .card{flex:none;width:100%;height:230px}
+  .controls{overflow:visible}
+}
+@media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto} }
+body.clean header,body.clean .controls{display:none}
+body.clean main{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}
+body.clean .app{padding-block:8px}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <h1>MOS Capacitor Simulator</h1>
+    <p>p-type Si body · 300 K · exact 1-D Poisson solution · EE.30062 Semiconductor Devices, Lecture 5</p>
+  </header>
+  <main>
+    <aside class="controls" aria-label="Controls">
+      <div class="group vg">
+        <h2>Gate voltage</h2>
+        <div class="row"><label for="vg">V<sub>G</sub></label><output id="oVG" for="vg">0.60 V</output></div>
+        <input id="vg" type="range" min="-2.5" max="3.5" step="0.01" value="0.6">
+        <div class="btns">
+          <button id="pAcc" type="button">Accumulation</button>
+          <button id="pFB" type="button">Flat band</button>
+          <button id="pDep" type="button">Depletion</button>
+          <button id="pInv" type="button">Inversion</button>
+        </div>
+        <button id="sweep" class="primary" type="button" aria-pressed="false">▶ Sweep V<sub>G</sub></button>
+      </div>
+      <div class="group">
+        <h2>Device</h2>
+        <div class="row"><label for="na">Body doping N<sub>A</sub></label><output id="oNA" for="na"></output></div>
+        <input id="na" type="range" min="15" max="18" step="0.05" value="17">
+        <div class="row"><label for="tox">Oxide thickness t<sub>ox</sub></label><output id="oTox" for="tox"></output></div>
+        <input id="tox" type="range" min="2" max="30" step="0.5" value="10">
+        <div class="row"><label for="gate">Gate</label>
+          <select id="gate">
+            <option value="ideal">Ideal (φₘₛ = 0)</option>
+            <option value="al">Al (φₘ = 4.10 V)</option>
+            <option value="npoly">n⁺ poly-Si</option>
+            <option value="ppoly">p⁺ poly-Si</option>
+          </select></div>
+        <div class="row"><label for="qss">Oxide charge Q<sub>ss</sub>/q</label><output id="oQss" for="qss"></output></div>
+        <input id="qss" type="range" min="0" max="200" step="1" value="0">
+      </div>
+      <div class="group">
+        <h2>C–V curves</h2>
+        <div class="checks">
+          <label><input id="kLF" type="checkbox" checked> Low freq.</label>
+          <label><input id="kHF" type="checkbox" checked> High freq.</label>
+          <label><input id="kDD" type="checkbox"> Deep depletion</label>
+        </div>
+        <div class="checks"><label><input id="kFast" type="checkbox"> Fast sweep: no inversion layer</label></div>
+      </div>
+      <div class="group state" aria-live="polite">
+        <div class="row"><span>Surface</span><span id="region" class="region">depletion</span></div>
+        <table id="tab"></table>
+      </div>
+      <button id="reset" type="button">Reset to default device</button>
+      <p class="hint">Oxide barrier height is drawn compressed (break marks); its tilt is to scale.</p>
+    </aside>
+    <section class="col col-bands">
+      <figure class="card" id="cBand"><div class="plot" id="pBand" role="img" aria-label="Energy band diagram"></div></figure>
+      <figure class="card" id="cCharge"><div class="plot" id="pCharge" role="img" aria-label="Charge picture"></div></figure>
+    </section>
+    <section class="col col-curves">
+      <figure class="card" id="cPsi"><div class="plot" id="pPsi" role="img" aria-label="Surface potential versus gate voltage"></div></figure>
+      <figure class="card" id="cQ"><div class="plot" id="pQ" role="img" aria-label="Charge versus gate voltage"></div></figure>
+      <figure class="card" id="cCV"><div class="plot" id="pCV" role="img" aria-label="Capacitance versus gate voltage"></div></figure>
+    </section>
+  </main>
+</div>
+
+<script>
+/* moscap_core.js
+ * Shared physics engine + SVG drawing library for the EE.30062 MOS-capacitor lectures.
+ * The same code draws the interactive simulator and every lecture graph, so both share one look.
+ * Physics: p-type Si body, 300 K, exact 1-D Poisson solution (Tsividis & McAndrew, Ch. 2).
+ */
+(function (root) {
+'use strict';
+
+/* ---------------- constants ---------------- */
+const P = { q: 1.602176634e-19, eps0: 8.8541878128e-14, kSi: 11.7, kOx: 3.9, Vt: 0.025852,
+            ni: 1.0e10, Eg: 1.12, chiSi: 4.05, chiOx: 0.95, EgOx: 9.0 };
+P.es = P.kSi * P.eps0;
+P.eox = P.kOx * P.eps0;
+P.dEc = P.chiSi - P.chiOx;            // SiO2 / Si conduction-band offset, 3.10 eV
+
+const GATES = {
+  ideal: { name: 'Ideal gate (φ_{MS} = 0)', short: 'ideal', phiM: null },
+  al:    { name: 'Al (φ_{M} = 4.10 V)', short: 'Al', phiM: 4.10 },
+  npoly: { name: 'n^{+} poly-Si', short: 'n^{+} poly', phiM: P.chiSi },
+  ppoly: { name: 'p^{+} poly-Si', short: 'p^{+} poly', phiM: P.chiSi + P.Eg }
+};
+
+/* one palette for simulator and slides */
+const C = {
+  title: '#004187', ink: '#3C3C3B', axis: '#5F6368', grid: '#EBEEF2', muted: '#8A8F98', faint: '#B9BEC6',
+  band: '#3C3C3B', ei: '#8A8F98', ef: '#C0198C',
+  e: '#1F5FD0', h: '#E02B20',
+  dep: '#DCE7F6', depEdge: '#6F95CF', ox: '#F4EAD0', oxEdge: '#C8B684', gate: '#E9ECF0', hatch: '#A6ADB7',
+  lf: '#004187', hf: '#E02B20', dd: '#7D838C', vfb: '#1B8A3A', vt: '#E58A00', dq: '#1B8A3A', qss: '#E58A00',
+  acc: 'rgba(224,43,32,0.055)', depl: 'rgba(31,95,208,0.05)', inv: 'rgba(0,65,135,0.085)'
+};
+const FONT = 'Arial, Helvetica, sans-serif';
+
+/* ---------------- numerics ---------------- */
+const ser = (a, b) => (b === Infinity ? a : 1 / (1 / a + 1 / b));
+function solveInc(fn, target, lo, hi) {           // fn monotonically increasing
+  let k = 0;
+  while (fn(lo) > target && k++ < 60) lo -= Math.max(1, Math.abs(lo));
+  k = 0;
+  while (fn(hi) < target && k++ < 60) hi += Math.max(1, Math.abs(hi));
+  for (let i = 0; i < 90; i++) {
+    const m = 0.5 * (lo + hi);
+    if (fn(m) > target) hi = m; else lo = m;
+  }
+  return 0.5 * (lo + hi);
+}
+const linspace = (a, b, n) => Array.from({ length: n }, (_, i) => a + (b - a) * i / (n - 1));
+const logspace = (a, b, n) => linspace(Math.log10(a), Math.log10(b), n).map(v => Math.pow(10, v));
+
+/* ---------------- device model ---------------- */
+function device(opt) {
+  const o = Object.assign({ NA: 1e17, tox: 10, gate: 'ideal', Nss: 0, Dit: 0 }, opt || {});
+  const Vt = P.Vt, NA = o.NA, em1 = Math.expm1;
+  const d = { opt: o, NA, P };
+  d.tox = o.tox * 1e-7;
+  d.phiF = Vt * Math.log(NA / P.ni);
+  d.phi2F = 2 * d.phiF;
+  d.Cox = P.eox / d.tox;
+  d.A = Math.sqrt(2 * P.q * P.es * NA);
+  d.gamma = d.A / d.Cox;
+  d.phiS = P.chiSi + P.Eg / 2 + d.phiF;
+  const g = GATES[o.gate] || GATES.ideal;
+  d.gateName = g.name;
+  d.phiM = g.phiM == null ? d.phiS : g.phiM;
+  d.phiMS = d.phiM - d.phiS;
+  d.Qss = P.q * o.Nss;
+  d.Cit = P.q * o.Dit;
+  d.VFB0 = d.phiMS - d.Qss / d.Cox;
+  d.r2 = Math.exp(-2 * d.phiF / Vt);                 // (ni/NA)^2
+  d.LD = Math.sqrt(P.es * Vt / (P.q * NA));
+  d.Wm = Math.sqrt(2 * P.es * d.phi2F / (P.q * NA));
+  d.QDm = -P.q * NA * d.Wm;
+
+  d.F = psi => (Math.abs(psi) < 1e-7) ? (1 + d.r2) * psi * psi / (2 * Vt)
+                                       : Vt * em1(-psi / Vt) + psi + d.r2 * (Vt * em1(psi / Vt) - psi);
+  d.Fh = psi => (Math.abs(psi) < 1e-7) ? psi * psi / (2 * Vt) : Vt * em1(-psi / Vt) + psi;
+  d.Qs = psi => -Math.sign(psi) * d.A * Math.sqrt(Math.max(d.F(psi), 0));
+  d.Qb = psi => -Math.sign(psi) * d.A * Math.sqrt(Math.max(d.Fh(psi), 0));   // holes + ionized acceptors
+  d.Qn = psi => (psi > 0 ? Math.min(d.Qs(psi) - d.Qb(psi), 0) : 0);          // inversion electrons
+  d.Qit = psi => -d.Cit * (psi - d.phiF);                                      // traps neutral at midgap
+  d.Cs = psi => {
+    if (Math.abs(psi) < 1e-6) return d.A * Math.sqrt((1 + d.r2) / (2 * Vt));
+    return Math.sign(psi) * d.A * (-em1(-psi / Vt) + d.r2 * em1(psi / Vt)) / (2 * Math.sqrt(d.F(psi)));
+  };
+  d.Cb = psi => {
+    if (Math.abs(psi) < 1e-6) return d.A / Math.sqrt(2 * Vt);
+    return Math.sign(psi) * d.A * (-em1(-psi / Vt)) / (2 * Math.sqrt(d.Fh(psi)));
+  };
+  d.Ci = psi => Math.max(d.Cs(psi) - d.Cb(psi), 0);
+  d.VGof = psi => d.VFB0 + psi - (d.Qs(psi) + d.Qit(psi)) / d.Cox;
+  d.VGofDD = psi => d.VFB0 + psi - (d.Qb(psi) + d.Qit(psi)) / d.Cox;
+  d.psiS = VG => solveInc(d.VGof, VG, -1.2, d.phi2F + 1.0);
+  d.psiDD = VG => solveInc(d.VGofDD, VG, -1.2, 6);
+  d.VFB = d.VGof(0);                                   // actual flat band (includes interface traps)
+  d.VT = d.VGof(d.phi2F);                              // ψs = 2φF (classical threshold)
+  d.VTcl = d.VFB0 + d.phi2F + d.gamma * Math.sqrt(d.phi2F);
+  d.VL = d.VGof(d.phiF);                               // onset of weak inversion
+  d.CFB = ser(d.Cox, d.Cs(0));
+  d.Cmin = ser(d.Cox, P.es / d.Wm);                    // classical HF minimum at ψs = 2φF
+  d.CLF = VG => ser(d.Cox, d.Cs(d.psiS(VG)) + d.Cit);
+  d.CHF = VG => ser(d.Cox, d.Cb(d.psiS(VG)));
+  d.CDD = VG => ser(d.Cox, d.Cb(d.psiDD(VG)));
+
+  d.state = VG => {
+    const psi = d.psiS(VG), Qs = d.Qs(psi), Qb = d.Qb(psi), Qn = d.Qn(psi), Qit = d.Cit ? d.Qit(psi) : 0;
+    const QG = -(Qs + d.Qss + Qit);
+    const W = psi > 0 ? -Qb / (P.q * NA) : 0;
+    const ns = NA * d.r2 * Math.exp(psi / Vt), ps = NA * Math.exp(-psi / Vt);
+    const region = psi < -0.6 * Vt ? 'accumulation' : psi < 0.6 * Vt ? 'flat band'
+      : psi < d.phiF ? 'depletion' : psi < d.phi2F ? 'weak inversion' : 'strong inversion';
+    return { VG, psi, Qs, Qb, Qn, Qit, QG, psiOx: QG / d.Cox, W, ns, ps, region,
+             CLF: ser(d.Cox, d.Cs(psi) + d.Cit), CHF: ser(d.Cox, d.Cb(psi)) };
+  };
+  d.stateDD = VG => {                                  // no inversion layer (fast sweep)
+    const psi = d.psiDD(VG), Qb = d.Qb(psi), QG = -(Qb + d.Qss);
+    return { VG, psi, Qs: Qb, Qb, Qn: 0, Qit: 0, QG, psiOx: QG / d.Cox, W: psi > 0 ? -Qb / (P.q * NA) : 0,
+             ns: NA * d.r2 * Math.exp(psi / Vt), ps: NA * Math.exp(-psi / Vt), region: 'deep depletion' };
+  };
+  /* potential profile ψ(x) in the silicon, x in cm (RK4, adaptive step) */
+  d.profile = (psis, xmax, noElectrons) => {
+    const xs = [0], ps = [psis];
+    if (Math.abs(psis) < 1e-6) { xs.push(xmax); ps.push(psis); return { x: xs, psi: ps }; }
+    const FF = noElectrons ? d.Fh : d.F;
+    const f = psi => Math.sign(psi) * -d.A * Math.sqrt(Math.max(FF(psi), 0)) / P.es;   // dψ/dx = −E
+    let x = 0, psi = psis, guard = 0;
+    const hmax = xmax / 500;
+    while (x < xmax && guard++ < 40000) {
+      const k1 = f(psi);
+      let h = Math.min(hmax, 0.03 * Math.abs(psi) / Math.max(Math.abs(k1), 1e-30));
+      h = Math.max(h, 2e-10);
+      const k2 = f(psi + 0.5 * h * k1), k3 = f(psi + 0.5 * h * k2), k4 = f(psi + h * k3);
+      let pn = psi + h / 6 * (k1 + 2 * k2 + 2 * k3 + k4);
+      if (Math.sign(pn) !== Math.sign(psi) || Math.abs(pn) < 2e-5) pn = 0;
+      x += h; psi = pn; xs.push(x); ps.push(psi);
+      if (psi === 0) break;
+    }
+    if (x < xmax) { xs.push(xmax); ps.push(0); }
+    return { x: xs, psi: ps };
+  };
+  return d;
+}
+
+/* ---------------- SVG builder ---------------- */
+let UID = 0;
+const fmt = v => (Math.round(v * 100) / 100).toString();
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function attr(o) {
+  let s = '';
+  for (const k in o) {
+    const v = o[k];
+    if (v == null || v === false) continue;
+    s += ' ' + k + '="' + (typeof v === 'number' ? fmt(v) : esc(v)) + '"';
+  }
+  return s;
+}
+function sty(st) {
+  st = st || {};
+  const a = {};
+  a.stroke = st.c || 'none';
+  if (st.w != null) a['stroke-width'] = st.w;
+  if (st.d) a['stroke-dasharray'] = st.d;
+  a.fill = st.f || 'none';
+  if (st.o != null) a.opacity = st.o;
+  if (st.fo != null) a['fill-opacity'] = st.fo;
+  if (st.cap) a['stroke-linecap'] = st.cap;
+  if (st.join) a['stroke-linejoin'] = st.join;
+  if (st.me) a['marker-end'] = 'url(#' + st.me + ')';
+  if (st.ms) a['marker-start'] = 'url(#' + st.ms + ')';
+  return attr(a);
+}
+
+/* label markup: $…$ = math (letters italic); _x or _{..} subscript, ^x or ^{..} superscript (upright) */
+function pieces(s) {
+  const out = [];
+  let math = false, i = 0;
+  const push = (t, it, lv) => {
+    const L = out[out.length - 1];
+    if (L && L.it === it && L.lv === lv) L.t += t; else out.push({ t, it, lv });
+  };
+  while (i < s.length) {
+    const c = s[i];
+    if (c === '\\' && i + 1 < s.length) { push(s[i + 1], math, 0); i += 2; continue; }
+    if (c === '$') { math = !math; i++; continue; }
+    if (c === '_' || c === '^') {
+      let arg; i++;
+      if (s[i] === '{') {
+        let depth = 1, j = i + 1;
+        while (j < s.length && depth) { if (s[j] === '{') depth++; else if (s[j] === '}') depth--; j++; }
+        arg = s.slice(i + 1, j - 1); i = j;
+      } else { arg = s[i]; i++; }
+      const lv = c === '_' ? -1 : 1;
+      let m2 = false;
+      for (const ch of arg) { if (ch === '$') { m2 = !m2; continue; } push(ch, m2, lv); }
+      continue;
+    }
+    const letter = /[A-Za-zα-ωϕϵ]/.test(c);
+    push(c, math && letter, 0);
+    i++;
+  }
+  return out;
+}
+function mt(s, fs) {
+  let out = '', cur = 0;
+  for (const p of pieces(String(s))) {
+    const target = p.lv === -1 ? 0.30 * fs : p.lv === 1 ? -0.42 * fs : 0;
+    const a = {};
+    if (target !== cur) { a.dy = fmt(target - cur); cur = target; }
+    if (p.it) a['font-style'] = 'italic';
+    if (p.lv) a['font-size'] = fmt(fs * 0.7);
+    out += '<tspan' + attr(a) + '>' + esc(p.t) + '</tspan>';
+  }
+  return out;
+}
+function textWidth(s, fs) {                     // rough width estimate for layout decisions
+  let w = 0;
+  for (const p of pieces(String(s))) w += p.t.length * fs * (p.lv ? 0.7 : 1) * 0.56;
+  return w;
+}
+
+class SVGB {
+  constructor(w, h, opt) {
+    this.w = w; this.h = h; this.p = []; this.defs = []; this.id = 'm' + (++UID) + '_'; this.n = 0;
+    this.opt = opt || {}; this.mk = {}; this.fscale = this.opt.fscale || 1;
+  }
+  add(s) { this.p.push(s); return this; }
+  uid(t) { return this.id + (t || 'u') + (++this.n); }
+  line(x1, y1, x2, y2, st) { return this.add('<line' + attr({ x1, y1, x2, y2 }) + sty(st) + '/>'); }
+  pl(pts, st) {
+    if (!pts.length) return this;
+    return this.add('<polyline points="' + pts.map(p => fmt(p[0]) + ',' + fmt(p[1])).join(' ') + '"' + sty(st) + '/>');
+  }
+  pg(pts, st) { return this.add('<polygon points="' + pts.map(p => fmt(p[0]) + ',' + fmt(p[1])).join(' ') + '"' + sty(st) + '/>'); }
+  path(d, st) { return this.add('<path d="' + d + '"' + sty(st) + '/>'); }
+  rect(x, y, w, h, st, rx) { return this.add('<rect' + attr({ x, y, width: Math.max(w, 0), height: Math.max(h, 0), rx }) + sty(st) + '/>'); }
+  circ(cx, cy, r, st) { return this.add('<circle' + attr({ cx, cy, r }) + sty(st) + '/>'); }
+  text(x, y, s, t) {
+    t = t || {};
+    const fs = (t.s || 13) * this.fscale;
+    const a = { x, y, 'font-size': fs, fill: t.c || C.ink, 'text-anchor': t.a || 'start', 'font-family': t.f || FONT };
+    if (t.b) a['font-weight'] = 'bold';
+    if (t.i) a['font-style'] = 'italic';
+    if (t.bl) a['dominant-baseline'] = t.bl;
+    if (t.r) a.transform = 'rotate(' + t.r + ' ' + fmt(x) + ' ' + fmt(y) + ')';
+    if (t.o != null) a.opacity = t.o;
+    if (t.halo) { a.stroke = t.halo === true ? '#FFFFFF' : t.halo; a['stroke-width'] = 3.2; a['paint-order'] = 'stroke'; a['stroke-linejoin'] = 'round'; }
+    return this.add('<text' + attr(a) + '>' + mt(s, fs) + '</text>');
+  }
+  marker(color, size) {
+    const key = color + (size || 1);
+    if (this.mk[key]) return this.mk[key];
+    const id = this.uid('ah');
+    const s = size || 1;
+    this.defs.push('<marker id="' + id + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="' + fmt(7 * s) + '" markerHeight="' + fmt(7 * s) +
+      '" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" fill="' + color + '"/></marker>');
+    this.mk[key] = id;
+    return id;
+  }
+  arrow(x1, y1, x2, y2, st, both) {
+    st = Object.assign({ c: C.ink, w: 1.3 }, st);
+    const m = this.marker(st.c, st.hs);
+    const s2 = Object.assign({}, st, { me: m });
+    if (both) s2.ms = m;
+    return this.line(x1, y1, x2, y2, s2);
+  }
+  clipRect(x, y, w, h) {
+    const id = this.uid('c');
+    this.defs.push('<clipPath id="' + id + '"><rect' + attr({ x, y, width: w, height: h }) + '/></clipPath>');
+    return id;
+  }
+  hatchPattern(color, gap, ang) {
+    const id = this.uid('p');
+    this.defs.push('<pattern id="' + id + '" width="' + gap + '" height="' + gap + '" patternUnits="userSpaceOnUse" patternTransform="rotate(' + (ang || 45) + ')">' +
+      '<line x1="0" y1="0" x2="0" y2="' + gap + '" stroke="' + color + '" stroke-width="1"/></pattern>');
+    return id;
+  }
+  open(a) { return this.add('<g' + attr(a || {}) + '>'); }
+  close() { return this.add('</g>'); }
+  toString(extra) {
+    const bg = this.opt.bg === undefined ? '#FFFFFF' : this.opt.bg;
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + this.w + '" height="' + this.h + '" viewBox="0 0 ' + this.w + ' ' + this.h +
+      '" font-family="' + FONT + '"' + (extra || '') + '>' + (this.defs.length ? '<defs>' + this.defs.join('') + '</defs>' : '') +
+      (bg ? '<rect width="100%" height="100%" fill="' + bg + '"/>' : '') + this.p.join('') + '</svg>';
+  }
+}
+
+/* ---------------- axes ---------------- */
+function niceStep(span, n) {
+  const raw = span / Math.max(n, 1), mag = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / mag;
+  return (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * mag;
+}
+function ticksLin(a, b, n) {
+  const st = niceStep(b - a, n || 5), out = [];
+  for (let v = Math.ceil(a / st - 1e-9) * st; v <= b + st * 1e-6; v += st) out.push(Math.abs(v) < st * 1e-9 ? 0 : v);
+  return out;
+}
+const tfmt = v => { const s = (+v.toPrecision(6)).toString(); return s.replace('-', '−'); };
+function axes(b, o) {
+  const x0 = o.x, y0 = o.y, w = o.w, h = o.h, x1 = x0 + w, y1 = y0 + h;
+  const xa = o.xr[0], xb = o.xr[1], ya = o.yr[0], yb = o.yr[1];
+  const L10 = Math.log10;
+  const X = v => x0 + (o.xlog ? (L10(v) - L10(xa)) / (L10(xb) - L10(xa)) : (v - xa) / (xb - xa)) * w;
+  const Y = v => y1 - (o.ylog ? (L10(v) - L10(ya)) / (L10(yb) - L10(ya)) : (v - ya) / (yb - ya)) * h;
+  const fs = o.fs || 12;
+  const xt = o.xt || (o.xlog ? logTicks(xa, xb) : ticksLin(xa, xb, o.nx || 6));
+  const yt = o.yt || (o.ylog ? logTicks(ya, yb) : ticksLin(ya, yb, o.ny || 5));
+  const xf = o.xf || (o.xlog ? v => '10^{' + Math.round(L10(v)) + '}' : tfmt);
+  const yf = o.yf || (o.ylog ? v => '10^{' + Math.round(L10(v)) + '}' : tfmt);
+  if (o.grid !== false) {
+    for (const v of xt) if (v > xa && v < xb) b.line(X(v), y0, X(v), y1, { c: C.grid, w: 1 });
+    for (const v of yt) if (v > ya && v < yb) b.line(x0, Y(v), x1, Y(v), { c: C.grid, w: 1 });
+  }
+  if (o.zeroY && ya < 0 && yb > 0) b.line(x0, Y(0), x1, Y(0), { c: C.faint, w: 1 });
+  if (o.zeroX && xa < 0 && xb > 0) b.line(X(0), y0, X(0), y1, { c: C.faint, w: 1 });
+  const ac = { c: C.axis, w: 1.2 };
+  if (o.box) b.rect(x0, y0, w, h, ac);
+  else { b.line(x0, y0, x0, y1, ac); b.line(x0, y1, x1, y1, ac); }
+  if (o.xlabels !== false) for (const v of xt) {
+    if (v < xa - 1e-12 || v > xb * (1 + 1e-9) + 1e-12) continue;
+    b.line(X(v), y1, X(v), y1 + 4, ac);
+    b.text(X(v), y1 + 6 + fs, xf(v), { s: fs, a: 'middle', c: C.ink });
+  }
+  if (o.ylabels !== false) for (const v of yt) {
+    if (v < ya - 1e-12 || v > yb * (1 + 1e-9) + 1e-12) continue;
+    b.line(x0 - 4, Y(v), x0, Y(v), ac);
+    b.text(x0 - 7, Y(v) + fs * 0.36, yf(v), { s: fs, a: 'end', c: C.ink });
+  }
+  if (o.xl) b.text(x0 + w / 2, y1 + 2 * fs + 12, o.xl, { s: fs + 1, a: 'middle' });
+  if (o.yl) b.text(x0 - (o.ylOff || 44), y0 + h / 2, o.yl, { s: fs + 1, a: 'middle', r: -90 });
+  if (o.title) b.text(o.titleX != null ? o.titleX : x0, y0 - 10, o.title, { s: fs + 2, b: true, c: C.title });
+  const clip = b.clipRect(x0, y0 - 1, w + 1, h + 2);
+  return { X, Y, x0, y0, x1, y1, w, h, clip, fs };
+}
+function logTicks(a, b) {
+  const out = [];
+  for (let k = Math.ceil(Math.log10(a) - 1e-9); k <= Math.floor(Math.log10(b) + 1e-9); k++) out.push(Math.pow(10, k));
+  return out;
+}
+function curve(b, ax, xs, ys, st) {
+  const pts = [];
+  for (let i = 0; i < xs.length; i++) if (isFinite(ys[i]) && isFinite(xs[i])) pts.push([ax.X(xs[i]), ax.Y(ys[i])]);
+  b.open({ 'clip-path': 'url(#' + ax.clip + ')' });
+  b.pl(pts, Object.assign({ c: C.lf, w: 2.2, join: 'round', cap: 'round' }, st));
+  b.close();
+}
+function legend(b, x, y, items, o) {
+  o = o || {};
+  const fs = o.fs || 12, dy = o.dy || fs + 7;
+  items.forEach((it, i) => {
+    const yy = y + i * dy;
+    if (it.box) b.rect(x, yy - 6, 22, 11, { f: it.box, c: it.c || 'none', w: 1 });
+    else if (it.dot) b.circ(x + 11, yy, 4, { f: it.c });
+    else b.line(x, yy, x + 24, yy, { c: it.c, w: it.w || 2.2, d: it.d });
+    b.text(x + 31, yy + fs * 0.36, it.label, { s: fs });
+  });
+}
+function vmark(b, ax, v, color, label, o) {       // vertical dashed marker with bottom label
+  o = o || {};
+  if (v < Math.min(ax.X.inv || -1e99, 1e99) && false) return;
+  const x = ax.X(v);
+  if (x < ax.x0 - 0.5 || x > ax.x1 + 0.5) return;
+  b.line(x, o.top != null ? o.top : ax.y0, x, ax.y1, { c: color, w: 1.2, d: '5 4' });
+  if (label) b.text(x + (o.dx || 0), (o.ly != null ? o.ly : ax.y1 - 6), label, { s: o.fs || 12, a: o.a || 'middle', c: color, b: true, halo: true });
+}
+function hmark(b, ax, v, color, label, o) {
+  o = o || {};
+  const y = ax.Y(v);
+  if (y < ax.y0 - 0.5 || y > ax.y1 + 0.5) return;
+  b.line(ax.x0, y, ax.x1, y, { c: color, w: 1.1, d: o.d || '5 4' });
+  if (label) b.text(o.lx != null ? o.lx : ax.x0 + 6, y - 5, label, { s: o.fs || 12, a: o.a || 'start', c: o.lc || color, halo: true });
+}
+
+/* ---------------- structure layout shared by band / charge pictures ---------------- */
+function layoutX(o) {
+  const gx0 = o.x, gx1 = o.x + o.gateW, ox1 = gx1 + o.oxW, sx1 = o.x + o.w;
+  return { gx0, gx1, ox0: gx1, ox1, sx0: ox1, sx1, XS: xcm => ox1 + xcm / o.xmaxSi * (sx1 - ox1) };
+}
+
+/* energy band diagram: gate | oxide | p-Si, energies in eV with E_F(Si) = 0 */
+function bandDiagram(b, dev, st, o) {
+  o = Object.assign({ gateW: 64, oxW: 40, er: [-2.6, 2.4], oxDisp: 1.25, carriers: true, depl: true,
+                      labels: true, region: true, annot: {}, lw: 2.2, fs: 13, dd: false, efExt: true,
+                      xmaxSi: 1.7 * dev.Wm, gateLabel: 'gate', oxLabel: 'oxide', siLabel: 'p-Si' }, o);
+  const L = layoutX(o), emin = o.er[0], emax = o.er[1], y0 = o.y, y1 = o.y + o.h;
+  const Y = e => y0 + (emax - e) / (emax - emin) * o.h;
+  const Yc = e => Math.max(y0 - 4, Math.min(y1 + 4, Y(e)));
+  const prof = dev.profile(st.psi, o.xmaxSi, o.dd);
+  const phiF = dev.phiF, Eg = P.Eg;
+  const Ec = p => phiF + Eg / 2 - p, Ei = p => phiF - p, Ev = p => phiF - Eg / 2 - p;
+  const psiAt = xc => { const xs = prof.x; let k = 0; while (k < xs.length - 1 && xs[k + 1] < xc) k++;
+    if (k >= xs.length - 1) return prof.psi[xs.length - 1];
+    const t = (xc - xs[k]) / (xs[k + 1] - xs[k] || 1); return prof.psi[k] + t * (prof.psi[k + 1] - prof.psi[k]); };
+  const cid = b.clipRect(o.x, y0, o.w, o.h);
+  b.open({ 'clip-path': 'url(#' + cid + ')' });
+  // gate: Fermi sea
+  const EFM = -st.VG;
+  b.rect(L.gx0, y0, L.gx1 - L.gx0, o.h, { f: C.gate });
+  const hp = b.hatchPattern(C.hatch, 6, 45);
+  const yFM = Yc(EFM);
+  b.rect(L.gx0, yFM, L.gx1 - L.gx0, y1 - yFM, { f: 'url(#' + hp + ')' });
+  // oxide (conduction-band edge drawn with a display offset; tilt is to scale)
+  const ecs = Ec(st.psi), topSi = ecs + o.oxDisp, topG = topSi - st.psiOx;
+  b.pg([[L.ox0, Y(topG)], [L.ox1, Y(topSi)], [L.ox1, y1 + 5], [L.ox0, y1 + 5]], { f: C.ox });
+  b.line(L.ox0, Y(topG), L.ox1, Y(topSi), { c: C.band, w: o.lw * 0.8 });
+  b.line(L.ox0, Y(topG), L.ox0, y1 + 5, { c: C.oxEdge, w: 1.2 });
+  b.line(L.ox1, Y(topSi), L.ox1, y1 + 5, { c: C.oxEdge, w: 1.2 });
+  if (o.oxDisp < P.dEc - 0.2) {                       // break marks: oxide barrier not to scale
+    for (const xw of [L.ox0, L.ox1]) {
+      const yb = (xw === L.ox0 ? Y(topG) : Y(topSi)) + 14;
+      b.line(xw - 5, yb + 3, xw + 5, yb - 3, { c: C.ink, w: 1.1 });
+      b.line(xw - 5, yb + 8, xw + 5, yb + 2, { c: C.ink, w: 1.1 });
+    }
+  }
+  // depletion shading
+  if (o.depl && st.W > 0) b.rect(L.sx0, y0, Math.min(L.XS(st.W), L.sx1) - L.sx0, o.h, { f: C.dep, o: 0.75 });
+  // bands
+  const xsPx = prof.x.map(L.XS);
+  const band = fn => prof.psi.map((p, i) => [xsPx[i], Y(fn(p))]);
+  b.pl(band(Ei), { c: C.ei, w: 1.3, d: '6 4' });
+  b.pl(band(Ec), { c: C.band, w: o.lw, join: 'round' });
+  b.pl(band(Ev), { c: C.band, w: o.lw, join: 'round' });
+  // Fermi levels
+  if (o.efExt && Math.abs(EFM) > 0.02) b.line(L.gx1 - 12, Y(0), L.sx0, Y(0), { c: C.ef, w: 1, d: '2 3' });
+  b.line(L.sx0, Y(0), L.sx1, Y(0), { c: C.ef, w: 1.7, d: '7 3' });
+  b.line(L.gx0, yFM, L.gx1, yFM, { c: C.ef, w: 2.2 });
+  // carriers
+  if (o.carriers) {
+    const r = 3.1, dot = (x, y, el) => el ? b.circ(x, y, r, { f: C.e }) : b.circ(x, y, r, { f: '#FFFFFF', c: C.h, w: 1.4 });
+    const qref = dev.Cox * 0.2;
+    const nDots = Q => (Math.abs(Q) > 0.02 * dev.Cox ? Math.max(1, Math.min(18, Math.round(Math.abs(Q) / qref))) : 0);
+    const xStart = st.W > 0 ? st.W : 0;
+    const gap = 17, pxW = L.sx1 - L.sx0;
+    for (let px = L.XS(xStart) + gap * 0.9; px < L.sx1 - 6; px += gap) {
+      const xc = (px - L.sx0) / pxW * o.xmaxSi;
+      dot(px, Y(Ev(psiAt(xc))) + 7, false);
+    }
+    const nh = st.psi < 0 ? nDots(st.Qb) : 0, ne = nDots(st.Qn);
+    const place = (n, el) => {
+      for (let k = 0; k < n; k++) {
+        const col = Math.floor(k / 3), row = k % 3;
+        const px = L.sx0 + 5 + col * 7.5 + (row % 2) * 3.5;
+        const xc = (px - L.sx0) / pxW * o.xmaxSi, p = psiAt(xc);
+        const y = el ? Y(Ec(p)) - 6 - row * 7 : Y(Ev(p)) + 6 + row * 7;
+        dot(px, y, el);
+      }
+    };
+    place(nh, false); place(ne, true);
+  }
+  b.close();
+  // walls between regions (outside clip for crispness)
+  b.line(L.gx1, y0, L.gx1, y1, { c: C.oxEdge, w: 1 });
+  // region captions
+  const fs = o.fs;
+  const capY = (y1 - yFM < 2.2 * fs) ? y0 + fs + 2 : y1 - 6;
+  if (o.gateLabel) b.text((L.gx0 + L.gx1) / 2, capY, o.gateLabel, { s: fs - 1, a: 'middle', c: C.muted });
+  if (o.oxLabel) b.text((L.ox0 + L.ox1) / 2, capY, o.oxLabel, { s: fs - 2, a: 'middle', c: C.muted });
+  if (o.siLabel) b.text(L.sx1 - 6, y1 - 6, o.siLabel, { s: fs - 1, a: 'end', c: C.muted });
+  if (o.region) b.text((L.sx0 + L.sx1) / 2, y0 + fs + 4, typeof o.region === 'string' ? o.region : st.region, { s: fs, a: 'middle', b: true, c: C.title, halo: true });
+  // band labels at the right edge
+  if (o.labels) {
+    const pe = prof.psi[prof.psi.length - 1], xl = L.sx1 + 5;
+    const lab = [['E_C', Ec(pe), C.band], ['E_i', Ei(pe), C.ei], ['E_F', 0, C.ef], ['E_V', Ev(pe), C.band]];
+    let prevY = -1e9;
+    lab.sort((a, c) => c[1] - a[1]).forEach(([t, e, col]) => {
+      let yy = Y(e) + fs * 0.35; if (yy - prevY < fs) yy = prevY + fs; prevY = yy;
+      if (e < emin || e > emax) return;
+      b.text(xl, yy, '$' + t + '$', { s: fs, c: col });
+    });
+    const below = (o.annot || {}).VG && EFM < -0.12;
+    if (EFM >= emin && EFM <= emax) b.text(L.gx0 + 4, below ? yFM + fs + 2 : yFM - 5, '$E_{FM}$', { s: fs - 1, c: C.ef, halo: true });
+  }
+  // annotations
+  const an = o.annot || {};
+  if (an.W && st.W > 0) {
+    const xw = L.XS(st.W), yy = y1 - (an.Wy || 22);
+    b.arrow(L.sx0 + 1, yy, xw, yy, { c: C.depEdge, w: 1.3 }, true);
+    b.text((L.sx0 + xw) / 2, yy - 5, an.Wlabel || '$W$', { s: fs, a: 'middle', c: C.depEdge, b: true, halo: true });
+  }
+  if (an.phiS && Math.abs(st.psi) > 0.05) {
+    const eb = Ei(0), es = Ei(st.psi), xa = L.sx0 + (an.phiSdx || 14);
+    b.line(L.sx0, Y(eb), L.XS(o.xmaxSi * 0.5), Y(eb), { c: C.ei, w: 1, d: '2 3' });
+    b.arrow(xa, Y(eb), xa, Y(es), { c: C.ink, w: 1.3 });
+    b.text(xa + 5, (Y(eb) + Y(es)) / 2 + 4, '$qφ_s$', { s: fs, halo: true });
+  }
+  if (an.phiF) {
+    const xa = L.sx1 - (an.phiFdx || 40);
+    b.arrow(xa, Y(0), xa, Y(phiF), { c: C.ink, w: 1.3 });
+    b.text(xa - 4, (Y(0) + Y(phiF)) / 2 + 4, '$qφ_F$', { s: fs, a: 'end', halo: true });
+  }
+  if (an.VG && Math.abs(EFM) > 0.12 && EFM > emin && EFM < emax) {
+    const xa = L.gx1 - 12;
+    b.arrow(xa, Y(0), xa, yFM, { c: C.ink, w: 1.3 });
+    b.text(xa - 4, (Y(0) + yFM) / 2 + 4, an.VGlabel || '$qV_G$', { s: fs, a: 'end', halo: true });
+  }
+  if (an.psiOx && Math.abs(st.psiOx) > 0.08) {
+    const yA = Y(topG), yB = Y(topSi), xm = (L.ox0 + L.ox1) / 2;
+    b.text(xm, Math.min(yA, yB) - 6, '$qV_{ox}$', { s: fs - 1, a: 'middle', halo: true });
+  }
+  return { L, Y, prof, EFM, Ec, Ei, Ev };
+}
+
+/* schematic charge picture ρ(x): sheet charges as bars, depletion charge as a block */
+function chargePicture(b, dev, st, o) {
+  o = Object.assign({ gateW: 64, oxW: 40, xmaxSi: 1.7 * dev.Wm, qref: dev.Cox * 2.5, depH: 0.2, fs: 12,
+                      values: true, labels: true, dq: null, barW: 7, axisLabel: 'ρ($x$)', regions: true }, o);
+  const L = layoutX(o), y0 = o.y, y1 = o.y + o.h, yz = o.y + o.h * (o.zero || 0.5), Hup = yz - y0 - 16, Hdn = y1 - yz - 16;
+  const hq = Q => { const v = Math.max(-1, Math.min(1, Q / o.qref)); return v >= 0 ? v * Hup : v * Hdn; };
+  const minH = 4;
+  if (o.regions) {
+    b.rect(L.gx0, y0, L.gx1 - L.gx0, o.h, { f: C.gate, o: 0.7 });
+    b.rect(L.ox0, y0, L.ox1 - L.ox0, o.h, { f: C.ox, o: 0.8 });
+  }
+  b.arrow(L.gx0, yz, L.sx1 + 4, yz, { c: C.axis, w: 1.1 });
+  if (o.axisLabel) b.text(L.sx1 - 2, yz + o.fs + 6, o.axisLabel, { s: o.fs, a: 'end', c: C.muted });
+  const fsv = o.fs - 1;
+  const fmtQ = Q => (Q >= 0 ? '+' : '−') + Math.abs(Q * 1e6).toFixed(2);
+  // gate sheet
+  const hG = hq(st.QG);
+  if (Math.abs(st.QG) > 1e-12) {
+    const hh = Math.abs(hG) < minH ? Math.sign(hG) * minH : hG;
+    b.rect(L.gx1 - o.barW, hh >= 0 ? yz - hh : yz, o.barW, Math.abs(hh), { f: st.QG >= 0 ? C.h : C.e });
+    if (o.labels && !(o.dq && Math.abs(hh) < 28)) b.text(L.gx1 - o.barW - 5, hh >= 0 ? yz - hh + 12 : yz - hh - 3, '$Q_G$', { s: o.fs, a: 'end', c: st.QG >= 0 ? C.h : C.e, b: true, halo: true });
+  }
+  // fixed oxide charge
+  if (dev.Qss > 0) {
+    const hs = Math.max(hq(dev.Qss), minH);
+    b.rect(L.ox1 - 5, yz - hs, 5, hs, { f: C.qss });
+    if (o.labels) b.text(L.ox1 - 7, yz - hs - 3, '$Q_{ss}$', { s: o.fs - 1, a: 'end', c: C.qss, halo: true });
+  }
+  // silicon
+  if (st.psi < 0 && st.Qb > 0) {
+    const h = Math.max(hq(st.Qb), minH);
+    b.rect(L.sx0, yz - h, o.barW, h, { f: C.h });
+    if (o.labels) b.text(L.sx0 + o.barW + 5, yz - h + 12, 'holes', { s: o.fs, c: C.h, b: true, halo: true });
+  }
+  if (st.W > 0) {
+    const xw = Math.min(L.XS(st.W), L.sx1), hd = o.depH * Hdn;
+    b.rect(L.sx0, yz, xw - L.sx0, hd, { f: C.dep, c: C.depEdge, w: 1.3 });
+    if (o.labels) b.text((L.sx0 + xw) / 2, yz + hd + o.fs + 3, '$−qN_A$', { s: o.fs, a: 'middle', c: C.depEdge, b: true, halo: true });
+    if (o.labels) b.text(xw, yz - 5, '$W$', { s: o.fs, a: 'middle', c: C.depEdge, b: true });
+  }
+  if (st.Qn < -0.01 * dev.Cox * 0.1) {
+    const h = Math.max(-hq(st.Qn), minH);
+    b.rect(L.sx0, yz, o.barW * 0.8, h, { f: C.e });
+    if (o.labels && h > 10) b.text(L.sx0 + o.barW + 4, yz + h - 2, '$Q_n$', { s: o.fs, c: C.e, b: true, halo: true });
+  }
+  // ac charge increments (C–V lecture)
+  if (o.dq) {
+    const g = C.dq;
+    const gy = st.QG >= 0 ? yz - Math.abs(hG) : yz + Math.abs(hG);
+    b.rect(L.gx1 - o.barW - 4, gy - 3, o.barW + 4, 6, { f: g });
+    let xs;
+    if (o.dq === 'surface') xs = L.sx0;
+    else xs = Math.min(L.XS(st.W), L.sx1) - 3;
+    const yy = o.dq === 'surface' && st.psi < 0 ? yz - Math.max(hq(st.Qb), minH) : (o.dq === 'surface' ? yz + Math.max(-hq(st.Qn), minH) : yz + o.depH * Hdn);
+    b.rect(xs - 1, o.dq === 'surface' && st.psi < 0 ? yy - 3 : yy - 3, 8, 6, { f: g });
+    if (o.labels) {
+      b.text(L.gx1 - o.barW - 6, gy + (st.QG >= 0 ? -6 : 16), '$ΔQ$', { s: o.fs, a: 'end', c: g, b: true, halo: true });
+      b.text(xs + 12, yy + (o.dq === 'surface' && st.psi < 0 ? -6 : 16), '$−ΔQ$', { s: o.fs, c: g, b: true, halo: true });
+    }
+  }
+  if (o.values) {
+    const items = [['Q_G', st.QG, st.QG >= 0 ? C.h : C.e]];
+    if (st.psi < 0) items.push(['Q_{acc}', st.Qb, C.h]); else items.push(['Q_D', st.Qb, C.depEdge]);
+    items.push(['Q_n', st.Qn, C.e]);
+    if (dev.Qss > 0) items.push(['Q_{ss}', dev.Qss, C.qss]);
+    let yy = y0 + 14;
+    b.text(L.sx1 - 4, yy, 'µC/cm^{2}', { s: fsv - 1, a: 'end', c: C.muted }); yy += fsv + 4;
+    for (const [nm, v, col] of items) { b.text(L.sx1 - 4, yy, '$' + nm + '$ = ' + fmtQ(v), { s: fsv, a: 'end', c: col, halo: true }); yy += fsv + 4; }
+  }
+  return { L, yz };
+}
+
+/* ---------------- curve families vs V_G ---------------- */
+function sweep(dev, vr, n) {
+  const V = linspace(vr[0], vr[1], n || 241);
+  const psi = V.map(v => dev.psiS(v));
+  return {
+    V, psi,
+    psiDD: V.map(v => dev.psiDD(v)),
+    Qn: psi.map(p => -dev.Qn(p)), Qd: psi.map(p => (p > 0 ? -dev.Qb(p) : 0)),
+    CLF: psi.map(p => ser(dev.Cox, dev.Cs(p) + dev.Cit) / dev.Cox),
+    CHF: psi.map(p => ser(dev.Cox, dev.Cb(p)) / dev.Cox),
+    CDD: V.map(v => ser(dev.Cox, dev.Cb(dev.psiDD(v))) / dev.Cox),
+    W: psi.map(p => (p > 0 ? -dev.Qb(p) / (P.q * dev.NA) : 0))
+  };
+}
+function plotPsi(b, dev, sw, o) {
+  o = Object.assign({ fs: 12, yr: [-0.3, dev.phi2F + 0.35], title: 'Surface potential', dd: false, op: null }, o);
+  const ax = axes(b, { x: o.x, y: o.y, w: o.w, h: o.h, xr: [sw.V[0], sw.V[sw.V.length - 1]], yr: o.yr, fs: o.fs,
+                       xl: o.xl || '$V_G$ [V]', yl: o.yl || '$φ_s$ [V]', title: o.title, zeroY: true, ny: 5, nx: 7, ylOff: o.ylOff || 40 });
+  hmark(b, ax, dev.phiF, C.muted, '$φ_F$', { lx: ax.x0 + 6 });
+  hmark(b, ax, dev.phi2F, C.muted, '$2φ_F$', { lx: ax.x0 + 6 });
+  vmark(b, ax, dev.VFB, C.vfb, '$V_{FB}$', { ly: ax.y0 + 14 });
+  vmark(b, ax, dev.VT, C.vt, '$V_T$', { ly: ax.y0 + 14 });
+  if (o.dd) curve(b, ax, sw.V, sw.psiDD, { c: C.dd, w: 1.8, d: '6 4' });
+  curve(b, ax, sw.V, sw.psi, { c: C.lf, w: 2.4 });
+  if (o.op) b.circ(ax.X(o.op.VG), ax.Y(o.op.psi), 5.5, { f: C.h, c: '#FFFFFF', w: 1.5 });
+  return ax;
+}
+function plotQ(b, dev, sw, o) {
+  o = Object.assign({ fs: 12, title: 'Charge in the silicon', op: null, line: false }, o);
+  const qmax = Math.max(...sw.Qn, ...sw.Qd) * 1e6;
+  const ax = axes(b, { x: o.x, y: o.y, w: o.w, h: o.h, xr: [sw.V[0], sw.V[sw.V.length - 1]], yr: [0, o.qmax || Math.max(0.2, qmax * 1.08)], fs: o.fs,
+                       xl: o.xl || '$V_G$ [V]', yl: o.yl || '|$Q$| [µC/cm^{2}]', title: o.title, ny: 4, nx: 7, ylOff: o.ylOff || 40 });
+  vmark(b, ax, dev.VT, C.vt, '$V_T$', { ly: ax.y0 + 14 });
+  if (o.line) curve(b, ax, sw.V, sw.V.map(v => Math.max(dev.Cox * (v - dev.VT), 0) * 1e6), { c: C.vt, w: 1.4, d: '3 3' });
+  curve(b, ax, sw.V, sw.Qd.map(v => v * 1e6), { c: C.depEdge, w: 2.2, d: '7 4' });
+  curve(b, ax, sw.V, sw.Qn.map(v => v * 1e6), { c: C.e, w: 2.4 });
+  if (o.op) { const i = 0; b.circ(ax.X(o.op.VG), ax.Y(-o.op.Qn * 1e6), 5.5, { f: C.h, c: '#FFFFFF', w: 1.5 }); }
+  if (o.legend !== false) legend(b, ax.x0 + 12, ax.y0 + 14, [{ label: '|$Q_n$| (inversion)', c: C.e }, { label: '|$Q_D$| (depletion)', c: C.depEdge, d: '7 4' }], { fs: o.fs - 1 });
+  return ax;
+}
+function plotCV(b, dev, sw, o) {
+  o = Object.assign({ fs: 12, title: 'C–V', lf: true, hf: true, dd: false, op: null, marks: true, legend: true }, o);
+  const ax = axes(b, { x: o.x, y: o.y, w: o.w, h: o.h, xr: [sw.V[0], sw.V[sw.V.length - 1]], yr: [0, 1.08], fs: o.fs,
+                       xl: o.xl || '$V_G$ [V]', yl: o.yl || '$C/C_{ox}$', title: o.title, ny: 4, nx: 7, yt: [0, 0.25, 0.5, 0.75, 1], ylOff: o.ylOff || 40 });
+  if (o.marks) {
+    vmark(b, ax, dev.VFB, C.vfb, '$V_{FB}$', { ly: ax.y1 - 6 });
+    vmark(b, ax, dev.VT, C.vt, '$V_T$', { ly: ax.y1 - 6 });
+  }
+  if (o.dd) curve(b, ax, sw.V, sw.CDD, { c: C.dd, w: 2, d: '2 4', cap: 'round' });
+  if (o.hf) curve(b, ax, sw.V, sw.CHF, { c: C.hf, w: 2.2, d: '8 5' });
+  if (o.lf) curve(b, ax, sw.V, sw.CLF, { c: C.lf, w: 2.4 });
+  if (o.op) {
+    if (o.lf) b.circ(ax.X(o.op.VG), ax.Y(o.op.CLF / dev.Cox), 5, { f: C.lf, c: '#FFFFFF', w: 1.5 });
+    if (o.hf) b.circ(ax.X(o.op.VG), ax.Y(o.op.CHF / dev.Cox), 5, { f: C.hf, c: '#FFFFFF', w: 1.5 });
+  }
+  if (o.legend) {
+    const it = [];
+    if (o.lf) it.push({ label: 'low frequency', c: C.lf });
+    if (o.hf) it.push({ label: 'high frequency', c: C.hf, d: '8 5' });
+    if (o.dd) it.push({ label: 'deep depletion', c: C.dd, d: '2 4' });
+    legend(b, o.legendX != null ? o.legendX : ax.x1 - 150, o.legendY != null ? o.legendY : ax.y1 - 18 - (it.length - 1) * 19 - 26, it, { fs: o.fs - 1 });
+  }
+  return ax;
+}
+
+/* ---------------- formatting helpers ---------------- */
+function sci(v, dg) {
+  if (v === 0) return '0';
+  const e = Math.floor(Math.log10(Math.abs(v))), m = v / Math.pow(10, e);
+  const ms = m.toFixed(dg == null ? 1 : dg);
+  return (ms === '1.0' || ms === '1' ? '' : ms + '×') + '10^{' + String(e).replace('-', '−') + '}';
+}
+
+root.MOS = { P, C, GATES, FONT, device, ser, solveInc, linspace, logspace, SVGB, axes, curve, legend, vmark, hmark,
+             layoutX, bandDiagram, chargePicture, sweep, plotPsi, plotQ, plotCV, sci, mt, textWidth, ticksLin, tfmt, esc };
+})(typeof window !== 'undefined' ? window : this);
+
+</script>
+<script>
+(function () {
+'use strict';
+const M = window.MOS, P = M.P, C = M.C;
+const $ = id => document.getElementById(id);
+const DEF = { VG: 0.6, NAexp: 17, tox: 10, gate: 'ideal', nss: 0, lf: true, hf: true, dd: false, fast: false };
+const S = Object.assign({}, DEF);
+let dev, sw, vr, xmaxSi, er, qref, raf = 0, sweeping = false, dir = 1, lastT = 0;
+
+function sup(e) { return String(e).replace('-', '⁻').replace(/[0-9]/g, d => '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]); }
+function sciTxt(v, dg) { const e = Math.floor(Math.log10(v)), m = v / Math.pow(10, e); return m.toFixed(dg) + ' × 10' + sup(e); }
+
+function rebuild() {
+  dev = M.device({ NA: Math.pow(10, S.NAexp), tox: S.tox, gate: S.gate, Nss: S.nss * 1e10 });
+  const vmin = Math.min(-2.5, Math.floor((dev.VFB - 1.6) * 2) / 2);
+  const vmax = Math.max(3.5, Math.ceil((dev.VT + 1.8) * 2) / 2);
+  vr = [vmin, vmax];
+  const s = $('vg'); s.min = vmin; s.max = vmax;
+  S.VG = Math.min(vmax, Math.max(vmin, S.VG)); s.value = S.VG;
+  sw = M.sweep(dev, vr, 241);
+  const wdd = Math.sqrt(2 * P.es * Math.max(dev.psiDD(vmax), 0.1) / (P.q * dev.NA));
+  xmaxSi = Math.max(1.8 * dev.Wm, 12 * dev.LD, S.fast ? 1.12 * wdd : 0);
+  const evMin = dev.phiF - P.Eg / 2 - (S.fast ? dev.psiDD(vmax) : dev.phi2F + 0.2);
+  er = [Math.min(-vmax, evMin) - 0.35, Math.max(-vmin, dev.phiF + P.Eg / 2 + 0.5) + 0.45];
+  qref = dev.Cox * Math.max(vmax - dev.VFB, dev.VFB - vmin, 1);
+}
+
+function size(el) { const r = el.getBoundingClientRect(); return [Math.max(260, Math.round(r.width)), Math.max(150, Math.round(r.height))]; }
+
+function drawBand(st) {
+  const [w, h] = size($('cBand'));
+  const b = new M.SVGB(w, h);
+  const fs = w < 420 ? 12 : 13;
+  const clean = document.body.classList.contains('clean');
+  const vgTxt = (S.VG < 0 ? '−' : '') + Math.abs(S.VG).toFixed(2) + ' V';
+  b.text(14, 22, clean ? 'Energy band diagram at $V_G$ = ' + vgTxt : 'Energy band diagram', { s: fs + 2, b: true, c: C.title });
+  const gName = { ideal: '', al: 'Al gate', npoly: 'n^{+} poly gate', ppoly: 'p^{+} poly gate' }[S.gate];
+  const extra = [gName, S.nss ? '$Q_{ss}$/$q$ = ' + M.sci(S.nss * 1e10, 1) + ' cm^{−2}' : '', S.fast ? 'fast sweep' : ''].filter(Boolean).join(', ');
+  b.text(w - 14, 22, clean && extra ? extra : '$E_F$ (Si) = 0 eV', { s: fs - 1, a: 'end', c: clean && extra ? C.ink : C.muted });
+  const gateW = Math.max(46, w * 0.1), oxW = Math.max(30, w * 0.065);
+  const ec0 = dev.phiF + P.Eg / 2 - st.psi;
+  const oxDisp = Math.max(0.35, Math.min(1.25, er[1] - 0.1 - ec0 - Math.max(0, -st.psiOx)));
+  M.bandDiagram(b, dev, st, { x: 14, y: 34, w: w - 58, h: h - 44, er, gateW, oxW, xmaxSi, oxDisp, fs, dd: S.fast,
+    annot: { W: true, phiS: true, VG: true }, region: st.region.charAt(0).toUpperCase() + st.region.slice(1) });
+  $('pBand').innerHTML = b.toString();
+}
+function drawCharge(st) {
+  const [w, h] = size($('cCharge'));
+  const b = new M.SVGB(w, h);
+  const fs = w < 420 ? 11 : 12;
+  b.text(14, 20, 'Charge density ρ($x$) (sheet charges drawn as bars)', { s: fs + 1, b: true, c: C.title });
+  const gateW = Math.max(46, w * 0.1), oxW = Math.max(30, w * 0.065);
+  M.chargePicture(b, dev, st, { x: 14, y: 26, w: w - 58, h: h - 32, gateW, oxW, xmaxSi, qref, fs });
+  $('pCharge').innerHTML = b.toString();
+}
+function drawPsi(st) {
+  const [w, h] = size($('cPsi'));
+  const b = new M.SVGB(w, h);
+  M.plotPsi(b, dev, sw, { x: 58, y: 30, w: w - 76, h: h - 74, op: st, dd: S.fast, title: 'Surface potential $φ_s$', fs: 12 });
+  $('pPsi').innerHTML = b.toString();
+}
+function drawQ(st) {
+  const [w, h] = size($('cQ'));
+  const b = new M.SVGB(w, h);
+  M.plotQ(b, dev, sw, { x: 58, y: 30, w: w - 76, h: h - 74, op: S.fast ? null : st, title: 'Charge in the silicon (per unit area)', fs: 12 });
+  $('pQ').innerHTML = b.toString();
+}
+function drawCV(st) {
+  const [w, h] = size($('cCV'));
+  const b = new M.SVGB(w, h);
+  const ax = M.plotCV(b, dev, sw, { x: 58, y: 30, w: w - 76, h: h - 74, lf: S.lf, hf: S.hf, dd: S.dd, title: 'Capacitance–voltage', fs: 12,
+    op: null, legendX: 70, legendY: null });
+  const cOp = S.fast ? dev.CDD(S.VG) / dev.Cox : null;
+  if (S.fast) b.circ(ax.X(S.VG), ax.Y(cOp), 5, { f: C.dd, c: '#FFFFFF', w: 1.5 });
+  else {
+    if (S.lf) b.circ(ax.X(S.VG), ax.Y(st.CLF / dev.Cox), 5, { f: C.lf, c: '#FFFFFF', w: 1.5 });
+    if (S.hf) b.circ(ax.X(S.VG), ax.Y(st.CHF / dev.Cox), 5, { f: C.hf, c: '#FFFFFF', w: 1.5 });
+  }
+  $('pCV').innerHTML = b.toString();
+}
+function readout(st) {
+  $('oVG').textContent = S.VG.toFixed(2) + ' V';
+  $('oNA').textContent = sciTxt(Math.pow(10, S.NAexp), 1) + ' cm⁻³';
+  $('oTox').textContent = S.tox.toFixed(1) + ' nm';
+  $('oQss').textContent = S.nss ? sciTxt(S.nss * 1e10, 1) + ' cm⁻²' : '0';
+  $('region').textContent = st.region;
+  const f = (v, d) => (v < 0 ? '−' : '') + Math.abs(v).toFixed(d);
+  const rows = [
+    ['φ<sub>F</sub>', f(dev.phiF, 3) + ' V'], ['φ<sub>MS</sub>', f(dev.phiMS, 3) + ' V'],
+    ['V<sub>FB</sub>', f(dev.VFB, 3) + ' V'], ['V<sub>T</sub> (φ<sub>s</sub> = 2φ<sub>F</sub>)', f(dev.VT, 3) + ' V'],
+    ['C<sub>ox</sub>', (dev.Cox * 1e9).toFixed(0) + ' nF/cm²'], ['γ', dev.gamma.toFixed(3) + ' V<sup>½</sup>'],
+    ['W<sub>m</sub>', (dev.Wm * 1e7).toFixed(0) + ' nm'],
+    ['φ<sub>s</sub>', f(st.psi, 3) + ' V'], ['W', (st.W * 1e7).toFixed(0) + ' nm'],
+    ['Q<sub>n</sub>', f(st.Qn * 1e6, 3) + ' µC/cm²'],
+    ['C<sub>LF</sub> / C<sub>ox</sub>', (st.CLF / dev.Cox).toFixed(3)], ['C<sub>HF</sub> / C<sub>ox</sub>', (st.CHF / dev.Cox).toFixed(3)]
+  ];
+  $('tab').innerHTML = rows.map(r => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>').join('');
+}
+function render() {
+  const st = S.fast ? dev.stateDD(S.VG) : dev.state(S.VG);
+  if (S.fast) { st.CLF = dev.CDD(S.VG); st.CHF = st.CLF; }
+  readout(st); drawBand(st); drawCharge(st); drawPsi(st); drawQ(st); drawCV(st);
+}
+let pending = false;
+function schedule() { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; render(); }); } }
+
+function setVG(v) { S.VG = Math.min(vr[1], Math.max(vr[0], v)); $('vg').value = S.VG; schedule(); }
+$('vg').addEventListener('input', e => { S.VG = +e.target.value; schedule(); });
+$('na').addEventListener('input', e => { S.NAexp = +e.target.value; rebuild(); schedule(); });
+$('tox').addEventListener('input', e => { S.tox = +e.target.value; rebuild(); schedule(); });
+$('gate').addEventListener('change', e => { S.gate = e.target.value; rebuild(); schedule(); });
+$('qss').addEventListener('input', e => { S.nss = +e.target.value; rebuild(); schedule(); });
+$('kLF').addEventListener('change', e => { S.lf = e.target.checked; schedule(); });
+$('kHF').addEventListener('change', e => { S.hf = e.target.checked; schedule(); });
+$('kDD').addEventListener('change', e => { S.dd = e.target.checked; schedule(); });
+$('kFast').addEventListener('change', e => { S.fast = e.target.checked; if (S.fast) { S.dd = true; $('kDD').checked = true; } rebuild(); schedule(); });
+$('pAcc').onclick = () => setVG(dev.VFB - 1.5);
+$('pFB').onclick = () => setVG(dev.VFB);
+$('pDep').onclick = () => setVG(dev.VFB + 0.55 * (dev.VT - dev.VFB) * 0.8);
+$('pInv').onclick = () => setVG(dev.VT + 1.2);
+function stopSweep() { sweeping = false; cancelAnimationFrame(raf); $('sweep').setAttribute('aria-pressed', 'false'); $('sweep').innerHTML = '▶ Sweep V<sub>G</sub>'; }
+function step(t) {
+  if (!sweeping) return;
+  const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0; lastT = t;
+  let v = S.VG + dir * dt * (vr[1] - vr[0]) / 7;
+  if (v >= vr[1]) { v = vr[1]; dir = -1; } else if (v <= vr[0]) { v = vr[0]; dir = 1; }
+  S.VG = v; $('vg').value = v; render();
+  raf = requestAnimationFrame(step);
+}
+$('sweep').onclick = () => {
+  if (sweeping) { stopSweep(); return; }
+  sweeping = true; lastT = 0; $('sweep').setAttribute('aria-pressed', 'true'); $('sweep').textContent = '❚❚ Stop sweep';
+  raf = requestAnimationFrame(step);
+};
+$('reset').onclick = () => {
+  stopSweep(); Object.assign(S, DEF);
+  $('na').value = S.NAexp; $('tox').value = S.tox; $('gate').value = S.gate; $('qss').value = S.nss;
+  $('kLF').checked = S.lf; $('kHF').checked = S.hf; $('kDD').checked = S.dd; $('kFast').checked = S.fast;
+  rebuild(); setVG(DEF.VG);
+};
+$('sweep').innerHTML = '▶ Sweep V<sub>G</sub>';
+
+/* bare-token deep links, e.g. #acc #dep #inv #cv #shift */
+function applyHash() {
+  const parts = (location.hash || '').slice(1).split('_');
+  const h = parts[0];
+  document.body.classList.toggle('clean', parts.indexOf('clean') > 0);
+  const presets = {
+    acc: { VG: -1.5 }, fb: { VG: 0 }, dep: { VG: 0.6 }, inv: { VG: 2.5 }, weak: { VG: 1.0 },
+    cv: { VG: 2.5, dd: true }, shift: { gate: 'al', nss: 50, VG: 0.0, dd: false },
+    fast: { VG: 2.5, dd: true, fast: true }
+  };
+  const p = presets[h];
+  if (!p) return false;
+  Object.assign(S, DEF, p);
+  $('na').value = S.NAexp; $('tox').value = S.tox; $('gate').value = S.gate; $('qss').value = S.nss;
+  $('kLF').checked = S.lf; $('kHF').checked = S.hf; $('kDD').checked = S.dd; $('kFast').checked = S.fast;
+  rebuild(); setVG(S.VG);
+  return true;
+}
+window.addEventListener('hashchange', applyHash);
+window.addEventListener('resize', schedule);
+if (window.ResizeObserver) new ResizeObserver(schedule).observe(document.querySelector('main'));
+rebuild();
+if (!applyHash()) setVG(S.VG);
+render();
+})();
+</script>
+
+</body>
+</html>
